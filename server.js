@@ -1,0 +1,101 @@
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const { exec } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const fetch = require("node-fetch");
+const admin = require("firebase-admin");
+
+// 🔑 Printer ID
+const PRINTER_ID = process.env.PRINTER_ID;
+if (!PRINTER_ID) {
+  console.error("❌ ERROR: PRINTER_ID is not set in .env");
+  process.exit(1);
+}
+console.log(`🖨️ Printer backend starting for: ${PRINTER_ID}`);
+
+// 🔹 Firebase Admin SDK
+const serviceAccount = require("./firebase-service-account.json");
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  });
+}
+const db = admin.firestore();
+
+// Enable offline persistence (for Firestore SDK, optional for Admin SDK)
+db.settings({ ignoreUndefinedProperties: true });
+
+// 🔹 Express setup
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Health check route
+app.get("/status", (req, res) => {
+  res.json({ printerId: PRINTER_ID, status: "running" });
+});
+
+// 🔹 Function to process a single job
+async function processJob(doc) {
+  const job = doc.data();
+  const jobId = doc.id;
+  const localFile = path.join("/tmp", `${Date.now()}-${job.fileName}`);
+
+  console.log(`📥 Processing job ${jobId}`, job);
+
+  try {
+    // 1️⃣ Download file
+    const res = await fetch(job.imageUrl);
+    if (!res.ok) throw new Error(`Failed to download file: ${res.statusText}`);
+    const buffer = await res.buffer();
+    fs.writeFileSync(localFile, buffer);
+
+    // 2️⃣ Send to printer
+    await new Promise((resolve, reject) => {
+      exec(`lp -d ${PRINTER_ID} "${localFile}"`, (err, stdout, stderr) => {
+        if (err) return reject(stderr || err);
+        console.log(`[${PRINTER_ID}] Print output:`, stdout);
+        resolve();
+      });
+    });
+
+    // 3️⃣ Update Firestore job status
+    await db.collection("printJobs").doc(jobId).update({
+      status: "completed",
+      completedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    console.log(`✅ Job ${jobId} completed.`);
+
+  } catch (err) {
+    const errorMsg = err?.message || err?.toString() || "Unknown error";
+    console.error(`❌ Job ${jobId} failed:`, errorMsg);
+
+    await db.collection("printJobs").doc(jobId).update({
+      status: "failed",
+      error: errorMsg,
+    });
+  }
+}
+
+// 🔹 Listen for new pending jobs in real-time
+db.collection("printJobs")
+  .where("printerId", "==", PRINTER_ID)
+  .where("status", "==", "pending")
+  .onSnapshot(snapshot => {
+    snapshot.docChanges().forEach(change => {
+      if (change.type === "added") {
+        processJob(change.doc);
+      }
+    });
+  }, err => {
+    console.error(`[${PRINTER_ID}] Firestore listener error:`, err);
+  });
+
+// 🔹 Start Express server
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`🚀 Printer backend API running on http://localhost:${PORT}`);
+});
