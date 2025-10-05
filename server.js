@@ -4,7 +4,6 @@ const cors = require("cors");
 const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
-const fetch = require("node-fetch");
 const admin = require("firebase-admin");
 
 // 🔑 Printer ID
@@ -24,8 +23,9 @@ if (!admin.apps.length) {
   });
 }
 const db = admin.firestore();
+const bucket = admin.storage().bucket();
 
-// Enable offline persistence (for Firestore SDK, optional for Admin SDK)
+// Enable offline persistence (optional)
 db.settings({ ignoreUndefinedProperties: true });
 
 // 🔹 Express setup
@@ -33,12 +33,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Health check route
+// Health check
 app.get("/status", (req, res) => {
   res.json({ printerId: PRINTER_ID, status: "running" });
 });
 
-// 🔹 Function to process a single job
+// 🔹 Process a single print job
 async function processJob(doc) {
   const job = doc.data();
   const jobId = doc.id;
@@ -47,11 +47,10 @@ async function processJob(doc) {
   console.log(`📥 Processing job ${jobId}`, job);
 
   try {
-    // 1️⃣ Download file
-    const res = await fetch(job.imageUrl);
-    if (!res.ok) throw new Error(`Failed to download file: ${res.statusText}`);
-    const buffer = await res.buffer();
-    fs.writeFileSync(localFile, buffer);
+    // 1️⃣ Download file from Firebase Storage
+    const remoteFilePath = `printJobs/${job.fileName}`; // storage folder
+    await bucket.file(remoteFilePath).download({ destination: localFile });
+    console.log(`✅ File downloaded to ${localFile}`);
 
     // 2️⃣ Send to printer
     await new Promise((resolve, reject) => {
