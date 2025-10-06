@@ -104,7 +104,7 @@ db.collection("printJobs")
   });
 
 // 🔹 Start Express server
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Printer backend API running on http://localhost:${PORT}`);
 });
