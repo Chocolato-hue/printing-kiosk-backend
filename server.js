@@ -48,7 +48,7 @@ async function processJob(doc) {
 
   try {
     // 1️⃣ Download file from Firebase Storage
-    const remoteFilePath = `printJobs/${job.fileName}`; // storage folder
+    const remoteFilePath = `printJobs/${job.fileName}`;
     await bucket.file(remoteFilePath).download({ destination: localFile });
     console.log(`✅ File downloaded to ${localFile}`);
 
@@ -67,6 +67,16 @@ async function processJob(doc) {
       completedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     console.log(`✅ Job ${jobId} completed.`);
+
+    // 4️⃣ Delete temp file
+    fs.unlink(localFile, err => {
+      if (err) console.warn(`⚠️ Failed to delete temp file: ${localFile}`, err);
+      else console.log(`🧹 Deleted temp file: ${localFile}`);
+    });
+
+    // 5️⃣ Delete file from Firebase Storage
+    await bucket.file(remoteFilePath).delete();
+    console.log(`🗑️ Deleted file from Firebase Storage: ${remoteFilePath}`);
 
   } catch (err) {
     const errorMsg = err?.message || err?.toString() || "Unknown error";
