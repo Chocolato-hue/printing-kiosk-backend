@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
 
+
 // 🔑 Printer ID
 const PRINTER_ID = process.env.PRINTER_ID;
 if (!PRINTER_ID) {
@@ -20,13 +21,32 @@ if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+    databaseURL: "https://project01-7e159-default-rtdb.asia-southeast1.firebasedatabase.app", // ✅ replace with your actual RTDB URL
   });
 }
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
-
 // Enable offline persistence (optional)
 db.settings({ ignoreUndefinedProperties: true });
+
+// 🔹 Register printer presence in Realtime Database (using Admin SDK)
+const rtdb = admin.database();
+
+async function registerPrinterPresence() {
+  const statusRef = rtdb.ref(`status/${PRINTER_ID}`);
+
+  await statusRef.set({
+    state: "online",
+    lastSeen: Date.now()
+  });
+
+  // Automatically remove this entry when Dell disconnects
+  statusRef.onDisconnect().remove();
+
+  console.log(`🟢 ${PRINTER_ID} registered in Realtime Database`);
+}
+
+registerPrinterPresence();
 
 // 🔹 Express setup
 const app = express();
@@ -37,6 +57,11 @@ app.use(express.json());
 app.get("/status", (req, res) => {
   res.json({ printerId: PRINTER_ID, status: "running" });
 });
+app.get("/rtdb-status", async (req, res) => {
+  const statusRef = rtdb.ref(`status/${PRINTER_ID}`);
+  res.json({ printerId: PRINTER_ID, path: statusRef.key, connected: true });
+});
+
 
 // 🔹 Process a single print job
 async function processJob(doc) {
