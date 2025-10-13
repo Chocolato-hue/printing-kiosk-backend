@@ -78,8 +78,24 @@ async function processJob(doc) {
     console.log(`✅ File downloaded to ${localFile}`);
 
     // 2️⃣ Send to printer
+    const paperSize = job.paperSize ? job.paperSize.toLowerCase() : null;
+    const fitOption = job.options?.fitToPage ? "-o fit-to-page" : "";
+    const copiesOption = job.options?.copies ? `-n ${job.options.copies}` : "";
+
+    // Map paper sizes from frontend to printer's standard names
+    const sizeMap = {
+      "4x6": "A6",
+      "a5": "A5",
+      "a4": "A4",
+    };
+    const paperOption = paperSize && sizeMap[paperSize] ? `-o media=${sizeMap[paperSize]}` : "";
+
+    const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${localFile}"`;
+
+    console.log(`🖨️ Running print command: ${printCommand}`);
+
     await new Promise((resolve, reject) => {
-      exec(`lp -d ${PRINTER_ID} "${localFile}"`, (err, stdout, stderr) => {
+      exec(printCommand, (err, stdout, stderr) => {
         if (err) return reject(stderr || err);
         console.log(`[${PRINTER_ID}] Print output:`, stdout);
         resolve();
