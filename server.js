@@ -82,13 +82,8 @@ async function processJob(doc) {
     const fitOption = job.options?.fitToPage ? "-o fit-to-page" : "";
     const copiesOption = job.options?.copies ? `-n ${job.options.copies}` : "";
 
-    // Map paper sizes from frontend to printer's standard names
-    const sizeMap = {
-      "4x6": "A6",
-      "a5": "A5",
-      "a4": "A4",
-    };
-    const paperOption = paperSize && sizeMap[paperSize] ? `-o media=${sizeMap[paperSize]}` : "";
+    // 🔹 Force every print to use A5 paper
+    const paperOption = "-o media=A5";
 
     const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${localFile}"`;
 
