@@ -82,10 +82,26 @@ async function processJob(doc) {
     const fitOption = job.options?.fitToPage ? "-o fit-to-page" : "";
     const copiesOption = job.options?.copies ? `-n ${job.options.copies}` : "";
 
+    const sharp = require("sharp");
+
+    // 🔹 Convert image to Adobe RGB before printing
+    const adobeICC = "/usr/share/color/icc/AdobeRGB1998.icc";
+    const convertedFile = path.join("/tmp", `converted-${Date.now()}-${job.fileName}`);
+
+    try {
+      await sharp(localFile)
+        .withMetadata({ icc: adobeICC }) // Embed Adobe RGB color profile
+        .toFile(convertedFile);
+
+      console.log(`🎨 Converted image to Adobe RGB: ${convertedFile}`);
+    } catch (err) {
+      console.error("⚠️ Color conversion failed, using original file instead:", err);
+    }
+
     // 🔹 Force every print to use A5 paper
     const paperOption = "-o media=A5";
 
-    const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${localFile}"`;
+    const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${convertedFile || localFile}"`;
 
     console.log(`🖨️ Running print command: ${printCommand}`);
 
@@ -104,11 +120,20 @@ async function processJob(doc) {
     });
     console.log(`✅ Job ${jobId} completed.`);
 
-    // 4️⃣ Delete temp file
-    fs.unlink(localFile, err => {
-      if (err) console.warn(`⚠️ Failed to delete temp file: ${localFile}`, err);
-      else console.log(`🧹 Deleted temp file: ${localFile}`);
-    });
+    // 4️⃣ Delete temp files safely
+    if (localFile && fs.existsSync(localFile)) {
+      fs.unlink(localFile, err => {
+        if (err) console.warn(`⚠️ Failed to delete temp file: ${localFile}`, err);
+        else console.log(`🧹 Deleted temp file: ${localFile}`);
+      });
+    }
+
+    if (convertedFile && fs.existsSync(convertedFile)) {
+      fs.unlink(convertedFile, err => {
+        if (err) console.warn(`⚠️ Failed to delete converted file: ${convertedFile}`, err);
+        else console.log(`🧹 Deleted converted file: ${convertedFile}`);
+      });
+    }
 
     // 5️⃣ Delete file from Firebase Storage
     await bucket.file(remoteFilePath).delete();
