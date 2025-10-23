@@ -84,24 +84,58 @@ async function processJob(doc) {
 
     const sharp = require("sharp");
 
-    // 🔹 Convert image to Adobe RGB before printing
+    // 🔹 Convert and process image with Sharp + layout logic
     const adobeICC = "/usr/share/color/icc/AdobeRGB1998.icc";
     const convertedFile = path.join("/tmp", `converted-${Date.now()}-${job.fileName}`);
+    const processedFile = path.join("/tmp", `processed-${Date.now()}-${job.fileName}`);
 
     try {
-      await sharp(localFile)
-        .withMetadata({ icc: adobeICC }) // Embed Adobe RGB color profile
-        .toFile(convertedFile);
+      const layout = job.layout || job.options?.layout || "fullA5";
+      console.log(`🧩 Layout mode: ${layout}`);
 
-      console.log(`🎨 Converted image to Adobe RGB: ${convertedFile}`);
+      if (layout === "two4x6") {
+        console.log("🧩 Generating A5 with two 4x6 photos...");
+
+        // Step 1: Resize the uploaded image to 4×6 ratio
+        const single = await sharp(localFile)
+          .resize(1748, 1180, { fit: "cover" })
+          .withMetadata({ icc: adobeICC })
+          .toBuffer();
+
+        // Step 2: Combine two images vertically on A5 (1748×2480)
+        await sharp({
+          create: {
+            width: 1748,
+            height: 2480,
+            channels: 3,
+            background: "white",
+          },
+        })
+          .composite([
+            { input: single, top: 80, left: 0 },
+            { input: single, top: 1240, left: 0 },
+          ])
+          .jpeg({ quality: 95 })
+          .toFile(processedFile);
+
+        console.log(`🧩 Created stacked A5 layout (two 4×6): ${processedFile}`);
+      } else {
+        console.log("🖼️ Generating full A5 photo...");
+        await sharp(localFile)
+          .resize(1748, 2480, { fit: "cover" })
+          .withMetadata({ icc: adobeICC })
+          .jpeg({ quality: 95 })
+          .toFile(processedFile);
+      }
+
+      console.log(`🎨 Converted image to Adobe RGB + layout processed: ${processedFile}`);
     } catch (err) {
-      console.error("⚠️ Color conversion failed, using original file instead:", err);
+      console.error("⚠️ Sharp layout/color conversion failed, using original file instead:", err);
     }
 
     // 🔹 Force every print to use A5 paper
     const paperOption = "-o media=A5";
-
-    const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${convertedFile || localFile}"`;
+    const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${processedFile || localFile}"`;
 
     console.log(`🖨️ Running print command: ${printCommand}`);
 
