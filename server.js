@@ -115,6 +115,7 @@ async function processJob(doc) {
             { input: single, top: 80, left: 0 },
             { input: single, top: 1240, left: 0 },
           ])
+          .withMetadata({ icc: adobeICC, density: 300 }) // ✅ Add DPI info here
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
@@ -123,7 +124,7 @@ async function processJob(doc) {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
           .resize(1748, 2480, { fit: "cover" })
-          .withMetadata({ icc: adobeICC })
+          .withMetadata({ icc: adobeICC, density: 300 }) // ✅ Add DPI here too
           .jpeg({ quality: 95 })
           .toFile(processedFile);
       }
