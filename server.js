@@ -94,32 +94,39 @@ async function processJob(doc) {
       console.log(`🧩 Layout mode: ${layout}`);
 
       if (layout === "two4x6") {
-        console.log("🧩 Generating A5 with two 4x6 photos...");
+        console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos...");
 
-        // Step 1: Resize the uploaded image to 4×6 ratio
-        const single = await sharp(localFile)
-          .resize(1748, 1180, { fit: "cover" })
+        // Step 1: Resize and rotate image to landscape
+        const singleRotated = await sharp(localFile)
+          .resize(1748, 1180, { fit: "cover" }) // 4x6 ratio base
+          .rotate(90) // 🔁 Rotate horizontally
           .withMetadata({ icc: adobeICC })
           .toBuffer();
 
-        // Step 2: Combine two images vertically on A5 (1748×2480)
+        // Step 2: Calculate auto-centered placement
+        const canvasWidth = 1748;  // A5 width
+        const canvasHeight = 2480; // A5 height
+        const imageHeight = 1180;  // height of each rotated image
+        const gap = (canvasHeight - imageHeight * 2) / 3; // even gaps top/mid/bottom
+
+        // Step 3: Create A5 canvas and stack two rotated images vertically
         await sharp({
           create: {
-            width: 1748,
-            height: 2480,
+            width: canvasWidth,
+            height: canvasHeight,
             channels: 3,
             background: "white",
           },
         })
           .composite([
-            { input: single, top: 80, left: 0 },
-            { input: single, top: 1240, left: 0 },
+            { input: singleRotated, top: gap, left: 0 },
+            { input: singleRotated, top: gap * 2 + imageHeight, left: 0 },
           ])
-          .withMetadata({ icc: adobeICC, density: 300 }) // ✅ Add DPI info here
+          .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
-        console.log(`🧩 Created stacked A5 layout (two 4×6): ${processedFile}`);
+        console.log(`🧩 Created A5 layout with two horizontally rotated 4×6 photos: ${processedFile}`);
       } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
@@ -127,6 +134,8 @@ async function processJob(doc) {
           .withMetadata({ icc: adobeICC, density: 300 }) // ✅ Add DPI here too
           .jpeg({ quality: 95 })
           .toFile(processedFile);
+          
+        console.log(`✅ Full A5 image processed: ${processedFile}`);
       }
 
       console.log(`🎨 Converted image to Adobe RGB + layout processed: ${processedFile}`);
