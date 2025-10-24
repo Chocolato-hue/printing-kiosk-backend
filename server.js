@@ -119,8 +119,8 @@ async function processJob(doc) {
         console.log(`🔄 After rotation: ${rotatedWidth}×${rotatedHeight}`);
 
         // ✅ Calculate available space for each photo (divide A5 into 2 + gaps)
-        const gap = 50; // smaller vertical gap between photos
-        const availableHeightPerPhoto = Math.round((canvasHeight - gap * 3) / 2 + 50); // Space for each photo
+        const gap = Math.round(canvasHeight * 0.04); // 4% of height for gaps (~99px)
+        const availableHeightPerPhoto = Math.round((canvasHeight - gap * 3) / 2 + 100); // Space for each photo
         const availableWidth = canvasWidth;
 
         console.log(`📦 Available space per photo: ${availableWidth}×${availableHeightPerPhoto}, gap=${gap}px`);
