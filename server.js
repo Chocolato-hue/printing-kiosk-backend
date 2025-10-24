@@ -97,12 +97,11 @@ async function processJob(doc) {
         console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos (centered horizontally)...");
 
         // Step 1: Resize and rotate image to landscape correctly (center rotation)
-        const singleRotated = await sharp(localFile)
-          .resize(1748, 1180, { fit: "cover" }) // 4×6 ratio base
-          .rotate(90, { background: { r: 255, g: 255, b: 255, alpha: 1 } }) // ✅ proper rotation with white background
-          .trim() // ✅ remove any transparent padding from rotation
-          .withMetadata({ icc: adobeICC })
-          .toBuffer();
+      const singleRotated = await sharp(localFile)
+        .rotate(90, { background: "white" }) // first rotate
+        .resize(1748, 1180, { fit: "cover" }) // then resize to proper 4×6 landscape
+        .withMetadata({ icc: adobeICC })
+        .toBuffer();
 
         // Step 2: Canvas setup
         const canvasWidth = 1748;   // A5 width
