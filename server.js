@@ -106,14 +106,12 @@ async function processJob(doc) {
         // Step 2: Canvas setup
         const canvasWidth = 1748;   // A5 width
         const canvasHeight = 2480;  // A5 height
-        const imageWidth = 1180;    // after rotation (width/height swapped)
-        const imageHeight = 1748;   // actual landscape height
-        const scaledWidth = imageHeight; // to avoid confusion
+        // After rotation, the image's displayed width = original height (1748), height = original width (1180)
+        const rotatedWidth = 1748;   // horizontal span on canvas
+        const rotatedHeight = 1180;  // vertical span
+        const leftOffset = (canvasWidth - rotatedWidth) / 2; // ✅ true horizontal centering
+        const gap = (canvasHeight - rotatedHeight * 2) / 3;  // vertical spacing
 
-        // Step 3: Calculate placement
-        // Center horizontally
-        const leftOffset = (canvasWidth - imageHeight) / 2; // since image is rotated
-        const gap = (canvasHeight - imageWidth * 2) / 3;    // vertical spacing
 
         // Step 4: Stack two horizontally rotated images vertically
         await sharp({
