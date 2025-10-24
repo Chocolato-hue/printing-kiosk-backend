@@ -126,8 +126,8 @@ async function processJob(doc) {
           },
         })
           .composite([
-            { input: singleRotated, top: gap, left: leftOffset },
-            { input: singleRotated, top: gap * 2 + rotatedHeight, left: leftOffset },
+            { input: singleRotated, top: Math.round(gap), left: Math.round(leftOffset) },
+            { input: singleRotated, top: Math.round(gap * 2 + rotatedHeight), left: Math.round(leftOffset) },
           ])
           .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
