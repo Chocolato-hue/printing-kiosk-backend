@@ -94,30 +94,80 @@ async function processJob(doc) {
       console.log(`🧩 Layout mode: ${layout}`);
 
       if (layout === "two4x6") {
-        console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos (centered horizontally)...");
+        console.log("🧩 Generating vertical A5 with two rotated horizontal 4×6 photos (centered, not cropped)...");
 
-        // Step 1: Resize and rotate image to landscape correctly (center rotation)
-        const singleRotated = await sharp(localFile)
-          .resize(1748, 1180, { fit: "cover" })
+        // Canvas setup - A5 vertical/portrait
+        const canvasWidth = 1748;   // A5 width at 300 DPI
+        const canvasHeight = 2480;  // A5 height at 300 DPI
+        
+        // Get original image metadata
+        const metadata = await sharp(localFile).metadata();
+        const originalWidth = metadata.width;
+        const originalHeight = metadata.height;
+        
+        console.log(`📷 Original image: ${originalWidth}×${originalHeight}`);
+
+        // ✅ Step 1: Rotate image 90° (portrait → landscape, or landscape → more landscape)
+        const rotatedImage = await sharp(localFile)
           .rotate(90, { background: "white" })
+          .toBuffer();
+        
+        // After rotation, dimensions are swapped
+        const rotatedWidth = originalHeight;
+        const rotatedHeight = originalWidth;
+        
+        console.log(`🔄 After rotation: ${rotatedWidth}×${rotatedHeight}`);
+
+        // ✅ Calculate available space for each photo (divide A5 into 2 + gaps)
+        const gap = Math.round(canvasHeight * 0.04); // 4% of height for gaps (~99px)
+        const availableHeightPerPhoto = Math.round((canvasHeight - gap * 3) / 2); // Space for each photo
+        const availableWidth = canvasWidth;
+
+        console.log(`📦 Available space per photo: ${availableWidth}×${availableHeightPerPhoto}, gap=${gap}px`);
+
+        // ✅ Calculate scale to fit rotated image inside available space WITHOUT cropping
+        const scaleWidth = availableWidth / rotatedWidth;
+        const scaleHeight = availableHeightPerPhoto / rotatedHeight;
+        const scale = Math.min(scaleWidth, scaleHeight); // Use smaller scale to fit completely
+
+        const finalWidth = Math.round(rotatedWidth * scale);
+        const finalHeight = Math.round(rotatedHeight * scale);
+
+        console.log(`📐 Scaled rotated image: ${finalWidth}×${finalHeight} (scale: ${scale.toFixed(3)})`);
+
+        // ✅ Resize the rotated image to fit (no cropping)
+        const resizedPhoto = await sharp(rotatedImage)
+          .resize(finalWidth, finalHeight, { 
+            fit: "inside",  // ✅ Ensures entire image fits without cropping
+            withoutEnlargement: false,
+            background: { r: 255, g: 255, b: 255, alpha: 1 } // White background if needed
+          })
           .withMetadata({ icc: adobeICC })
           .toBuffer();
+        
+        // ✅ Double-check actual dimensions after resize
+        const resizedMetadata = await sharp(resizedPhoto).metadata();
+        console.log(`✅ Final photo dimensions: ${resizedMetadata.width}×${resizedMetadata.height}`);
 
-        // Step 2: Canvas setup
-        const canvasWidth = 1748;   // A5 width
-        const canvasHeight = 2480;  // A5 height
-        // After rotation, the image's displayed width = original height (1748), height = original width (1180) -> WE WONT USE THIS
-        // 🧮 Dynamically fit two rotated photos within A5
-        // After rotation: width and height are swapped
-        const rotatedWidth = 1180;   // actual width of rotated image
-        const rotatedHeight = 1748;  // actual height of rotated image
+        // ✅ Calculate centering offsets using actual resized dimensions
+        const actualWidth = resizedMetadata.width;
+        const actualHeight = resizedMetadata.height;
+        
+        // Center horizontally within A5 width
+        const leftOffset = Math.round((canvasWidth - actualWidth) / 2);
+        
+        // Center vertically within each photo slot
+        const topOffsetInSlot = Math.round((availableHeightPerPhoto - actualHeight) / 2);
 
-        // ✅ Center horizontally with fine-tuning for rotation offset
-        const leftOffset = Math.round((canvasWidth - rotatedWidth) / 2 + rotatedWidth * 0.03); // shift ~0.03% right
-        // ✅ Calculate gaps automatically - divides remaining space into 3 equal parts
-        const gap = Math.round((canvasHeight - rotatedHeight * 2) / 3);
+        // Position for first photo (top slot)
+        const firstPhotoTop = gap + topOffsetInSlot;
+        
+        // Position for second photo (bottom slot)
+        const secondPhotoTop = gap * 2 + availableHeightPerPhoto + topOffsetInSlot;
 
-        // Step 4: Stack two horizontally rotated images vertically
+        console.log(`📍 Positions: photo1 top=${firstPhotoTop}, photo2 top=${secondPhotoTop}, left=${leftOffset}`);
+
+        // ✅ Create canvas and composite two centered, rotated photos
         await sharp({
           create: {
             width: canvasWidth,
@@ -127,14 +177,14 @@ async function processJob(doc) {
           },
         })
           .composite([
-            { input: singleRotated, top: gap, left: leftOffset },
-            { input: singleRotated, top: gap * 2 + rotatedHeight, left: leftOffset },
+            { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
+            { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
           ])
           .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
-        console.log(`🧩 Created A5 layout with two horizontally rotated and centered 4×6 photos: ${processedFile}`);
+        console.log(`✅ Created vertical A5 with two horizontal (rotated 90°) centered photos`);
       } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
