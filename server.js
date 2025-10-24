@@ -97,24 +97,24 @@ async function processJob(doc) {
         console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos (centered horizontally)...");
 
         // Step 1: Resize and rotate image to landscape correctly (center rotation)
-      const singleRotated = await sharp(localFile)
-        .rotate(90, { background: "white" }) // first rotate
-        .resize(1748, 1180, { fit: "cover" }) // then resize to proper 4×6 landscape
-        .withMetadata({ icc: adobeICC })
-        .toBuffer();
+        const singleRotated = await sharp(localFile)
+          .resize(1748, 1180, { fit: "cover" })
+          .rotate(90, { background: "white" })
+          .withMetadata({ icc: adobeICC })
+          .toBuffer();
 
         // Step 2: Canvas setup
         const canvasWidth = 1748;   // A5 width
         const canvasHeight = 2480;  // A5 height
         // After rotation, the image's displayed width = original height (1748), height = original width (1180) -> WE WONT USE THIS
         // 🧮 Dynamically fit two rotated photos within A5
-        const availableHeight = canvasHeight * 0.9; // leave ~10% white margins
-        const rotatedHeight = availableHeight / 2;  // each photo gets half the vertical space
-        const rotatedWidth = rotatedHeight * (6 / 4); // maintain 4x6 aspect ratio (landscape)
+        // After rotation: width and height are swapped
+        const rotatedWidth = 1180;   // actual width of rotated image
+        const rotatedHeight = 1748;  // actual height of rotated image
 
-        // ✅ Center horizontally & space vertically
-        const leftOffset = (canvasWidth - rotatedWidth) / 2;
-        const gap = (canvasHeight - rotatedHeight * 2) / 3;
+        // ✅ Center horizontally with fine-tuning for rotation offset
+        const leftOffset = Math.round((canvasWidth - rotatedWidth) / 2 + rotatedWidth * 0.12); // shift ~12% right
+        const gap = Math.round((canvasHeight - rotatedHeight * 2) / 3);
 
         // Step 4: Stack two horizontally rotated images vertically
         await sharp({
@@ -126,8 +126,8 @@ async function processJob(doc) {
           },
         })
           .composite([
-            { input: singleRotated, top: Math.round(gap), left: Math.round(leftOffset) },
-            { input: singleRotated, top: Math.round(gap * 2 + rotatedHeight), left: Math.round(leftOffset) },
+            { input: singleRotated, top: gap, left: leftOffset },
+            { input: singleRotated, top: gap * 2 + rotatedHeight, left: leftOffset },
           ])
           .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
