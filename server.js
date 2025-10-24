@@ -94,98 +94,76 @@ async function processJob(doc) {
       console.log(`🧩 Layout mode: ${layout}`);
 
       if (layout === "two4x6") {
-        console.log("🧩 Generating vertical A5 with two rotated horizontal 4×6 photos (centered, not cropped)...");
+        console.log("🧩 Generating vertical A5 with two rotated horizontal 4×6 photos (centered, exact 15cm width)...");
 
         // Canvas setup - A5 vertical/portrait
         const canvasWidth = 1748;   // A5 width at 300 DPI
         const canvasHeight = 2480;  // A5 height at 300 DPI
-        
+
         // Get original image metadata
         const metadata = await sharp(localFile).metadata();
         const originalWidth = metadata.width;
         const originalHeight = metadata.height;
-        
         console.log(`📷 Original image: ${originalWidth}×${originalHeight}`);
 
-        // ✅ Step 1: Rotate image 90° (portrait → landscape, or landscape → more landscape)
+        // Rotate image 90°
         const rotatedImage = await sharp(localFile)
-          .rotate(90, { background: "white" })
-          .toBuffer();
-        
+            .rotate(90, { background: "white" })
+            .toBuffer();
+
         // After rotation, dimensions are swapped
         const rotatedWidth = originalHeight;
         const rotatedHeight = originalWidth;
-        
         console.log(`🔄 After rotation: ${rotatedWidth}×${rotatedHeight}`);
 
-        // ✅ Calculate available space for each photo (divide A5 into 2 + gaps)
-        const gap = Math.round(canvasHeight * 0.04); // 4% of height for gaps (~99px)
-        const availableHeightPerPhoto = Math.round((canvasHeight - gap * 3) / 2 + 100); // Space for each photo
-        const availableWidth = canvasWidth;
+        // Convert 15cm width to pixels (target width)
+        const targetPhotoWidth = Math.round(15 * 300 / 2.54); // ~1772px
 
-        console.log(`📦 Available space per photo: ${availableWidth}×${availableHeightPerPhoto}, gap=${gap}px`);
-
-        // ✅ Calculate scale to fit rotated image inside available space WITHOUT cropping
-        const scaleWidth = availableWidth / rotatedWidth;
-        const scaleHeight = availableHeightPerPhoto / rotatedHeight;
-        const scale = Math.min(scaleWidth, scaleHeight); // Use smaller scale to fit completely
-
+        // Calculate scale to match target width
+        const scale = targetPhotoWidth / rotatedWidth;
         const finalWidth = Math.round(rotatedWidth * scale);
         const finalHeight = Math.round(rotatedHeight * scale);
 
         console.log(`📐 Scaled rotated image: ${finalWidth}×${finalHeight} (scale: ${scale.toFixed(3)})`);
 
-        // ✅ Resize the rotated image to fit (no cropping)
+        // Resize the rotated image to match target width
         const resizedPhoto = await sharp(rotatedImage)
-          .resize(finalWidth, finalHeight, { 
-            fit: "inside",  // ✅ Ensures entire image fits without cropping
-            withoutEnlargement: false,
-            background: { r: 255, g: 255, b: 255, alpha: 1 } // White background if needed
-          })
-          .withMetadata({ icc: adobeICC })
-          .toBuffer();
-        
-        // ✅ Double-check actual dimensions after resize
-        const resizedMetadata = await sharp(resizedPhoto).metadata();
-        console.log(`✅ Final photo dimensions: ${resizedMetadata.width}×${resizedMetadata.height}`);
+            .resize(finalWidth, finalHeight, {
+                fit: "fill", // force exact width
+                background: { r: 255, g: 255, b: 255, alpha: 1 }
+            })
+            .withMetadata({ icc: adobeICC })
+            .toBuffer();
 
-        // ✅ Calculate centering offsets using actual resized dimensions
-        const actualWidth = resizedMetadata.width;
-        const actualHeight = resizedMetadata.height;
-        
-        // Center horizontally within A5 width
-        const leftOffset = Math.round((canvasWidth - actualWidth) / 2);
-        
-        // Center vertically within each photo slot
-        const topOffsetInSlot = Math.round((availableHeightPerPhoto - actualHeight) / 2);
+        // Compute vertical gaps to stack two photos
+        const totalPhotosHeight = finalHeight * 2;
+        const gap = Math.round((canvasHeight - totalPhotosHeight) / 3);
 
-        // Position for first photo (top slot)
-        const firstPhotoTop = gap + topOffsetInSlot;
-        
-        // Position for second photo (bottom slot)
-        const secondPhotoTop = gap * 2 + availableHeightPerPhoto + topOffsetInSlot;
+        const firstPhotoTop = gap;
+        const secondPhotoTop = gap * 2 + finalHeight;
+        const leftOffset = Math.round((canvasWidth - finalWidth) / 2);
 
-        console.log(`📍 Positions: photo1 top=${firstPhotoTop}, photo2 top=${secondPhotoTop}, left=${leftOffset}`);
+        console.log(`📍 Positions: photo1 top=${firstPhotoTop}, photo2 top=${secondPhotoTop}, left=${leftOffset}, vertical gap=${gap}px`);
 
-        // ✅ Create canvas and composite two centered, rotated photos
+        // Create canvas and composite two photos
         await sharp({
-          create: {
-            width: canvasWidth,
-            height: canvasHeight,
-            channels: 3,
-            background: "white",
-          },
+            create: {
+                width: canvasWidth,
+                height: canvasHeight,
+                channels: 3,
+                background: "white",
+            },
         })
-          .composite([
+        .composite([
             { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
             { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
-          ])
-          .withMetadata({ icc: adobeICC, density: 300 })
-          .jpeg({ quality: 95 })
-          .toFile(processedFile);
+        ])
+        .withMetadata({ icc: adobeICC, density: 300 })
+        .jpeg({ quality: 95 })
+        .toFile(processedFile);
 
-        console.log(`✅ Created vertical A5 with two horizontal (rotated 90°) centered photos`);
-      } else {
+        console.log("✅ Created vertical A5 with two horizontal (rotated 90°) photos, exact 15cm width, perfectly stacked");
+    } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
           .resize(1748, 2480, { fit: "cover" })
