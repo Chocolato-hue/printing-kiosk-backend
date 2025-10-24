@@ -94,22 +94,28 @@ async function processJob(doc) {
       console.log(`🧩 Layout mode: ${layout}`);
 
       if (layout === "two4x6") {
-        console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos...");
+        console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos (centered horizontally)...");
 
         // Step 1: Resize and rotate image to landscape
         const singleRotated = await sharp(localFile)
-          .resize(1748, 1180, { fit: "cover" }) // 4x6 ratio base
-          .rotate(90) // 🔁 Rotate horizontally
+          .resize(1748, 1180, { fit: "cover" }) // 4×6 ratio base
+          .rotate(90) // rotate horizontally
           .withMetadata({ icc: adobeICC })
           .toBuffer();
 
-        // Step 2: Calculate auto-centered placement
-        const canvasWidth = 1748;  // A5 width
-        const canvasHeight = 2480; // A5 height
-        const imageHeight = 1180;  // height of each rotated image
-        const gap = (canvasHeight - imageHeight * 2) / 3; // even gaps top/mid/bottom
+        // Step 2: Canvas setup
+        const canvasWidth = 1748;   // A5 width
+        const canvasHeight = 2480;  // A5 height
+        const imageWidth = 1180;    // after rotation (width/height swapped)
+        const imageHeight = 1748;   // actual landscape height
+        const scaledWidth = imageHeight; // to avoid confusion
 
-        // Step 3: Create A5 canvas and stack two rotated images vertically
+        // Step 3: Calculate placement
+        // Center horizontally
+        const leftOffset = (canvasWidth - imageHeight) / 2; // since image is rotated
+        const gap = (canvasHeight - imageWidth * 2) / 3;    // vertical spacing
+
+        // Step 4: Stack two horizontally rotated images vertically
         await sharp({
           create: {
             width: canvasWidth,
@@ -119,14 +125,14 @@ async function processJob(doc) {
           },
         })
           .composite([
-            { input: singleRotated, top: gap, left: 0 },
-            { input: singleRotated, top: gap * 2 + imageHeight, left: 0 },
+            { input: singleRotated, top: gap, left: leftOffset },
+            { input: singleRotated, top: gap * 2 + imageWidth, left: leftOffset },
           ])
           .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
-        console.log(`🧩 Created A5 layout with two horizontally rotated 4×6 photos: ${processedFile}`);
+        console.log(`🧩 Created A5 layout with two horizontally rotated and centered 4×6 photos: ${processedFile}`);
       } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
