@@ -113,8 +113,11 @@ async function processJob(doc) {
         const rotatedHeight = 1748;  // actual height of rotated image
 
         // ✅ Center horizontally with fine-tuning for rotation offset
-        const leftOffset = Math.round((canvasWidth - rotatedWidth) / 2 + rotatedWidth * 0.12); // shift ~12% right
-        const gap = Math.round((canvasHeight - rotatedHeight * 2) / 3);
+        const leftOffset = Math.round((canvasWidth - rotatedWidth) / 2 + rotatedWidth * 0.03); // shift ~0.03% right
+        // Compute total height of both images + a small middle spacing
+        const middleGap = 80; // pixels between the two photos (tweak 50–100)
+        const totalContentHeight = rotatedHeight * 2 + middleGap;
+        const topOffset = Math.round((canvasHeight - totalContentHeight) / 2);
 
         // Step 4: Stack two horizontally rotated images vertically
         await sharp({
@@ -126,8 +129,8 @@ async function processJob(doc) {
           },
         })
           .composite([
-            { input: singleRotated, top: gap, left: leftOffset },
-            { input: singleRotated, top: gap * 2 + rotatedHeight, left: leftOffset },
+            { input: singleRotated, top: topOffset, left: leftOffset },
+            { input: singleRotated, top: topOffset + rotatedHeight + middleGap, left: leftOffset },
           ])
           .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
