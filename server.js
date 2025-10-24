@@ -107,8 +107,8 @@ async function processJob(doc) {
         const canvasWidth = 1748;   // A5 width
         const canvasHeight = 2480;  // A5 height
         // After rotation, the image's displayed width = original height (1748), height = original width (1180)
-        const rotatedWidth = 1748;   // horizontal span on canvas
-        const rotatedHeight = 1180;  // vertical span
+        const rotatedWidth = 1180;  // ✅ actual horizontal span after rotation
+        const rotatedHeight = 1748; // ✅ actual vertical span after rotation
         const leftOffset = (canvasWidth - rotatedWidth) / 2; // ✅ true horizontal centering
         const gap = (canvasHeight - rotatedHeight * 2) / 3;  // vertical spacing
 
