@@ -96,10 +96,11 @@ async function processJob(doc) {
       if (layout === "two4x6") {
         console.log("🧩 Generating vertical A5 with two horizontal 4×6 photos (centered horizontally)...");
 
-        // Step 1: Resize and rotate image to landscape
+        // Step 1: Resize and rotate image to landscape correctly (center rotation)
         const singleRotated = await sharp(localFile)
           .resize(1748, 1180, { fit: "cover" }) // 4×6 ratio base
-          .rotate(90) // rotate horizontally
+          .rotate(90, { background: { r: 255, g: 255, b: 255, alpha: 1 } }) // ✅ proper rotation with white background
+          .trim() // ✅ remove any transparent padding from rotation
           .withMetadata({ icc: adobeICC })
           .toBuffer();
 
