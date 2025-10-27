@@ -94,84 +94,95 @@ async function processJob(doc) {
       console.log(`🧩 Layout mode: ${layout}`);
 
       if (layout === "two4x6") {
-        console.log("🧩 Generating A5 with two 4×6 photos (with 5% bleed compensation for full coverage)...");
+        console.log("🧩 Generating A5 with two 4×6 photos (bleed-safe, auto-cleanup)...");
 
-        // Canvas setup – A5 vertical (300 DPI)
-        const canvasWidth = 1748;   // 14.8 cm = 1748 px
-        const canvasHeight = 2480;  // 21.0 cm = 2480 px
+        // --- A5 portrait at 300 DPI ---
+        const canvasWidth = 1748;   // 14.8 cm
+        const canvasHeight = 2480;  // 21.0 cm
 
-        // 🩸 Add bleed compensation (≈ 4mm margin per side)
-        const bleedScale = 1.055;  // (14.8 + 0.4*2) / 14.8 ≈ 1.055
+        // --- Bleed settings (≈4mm per side) ---
+        const bleedScale = 1.055;
+        const photoWidth  = Math.round(canvasWidth * bleedScale);
+        const photoHeight = Math.round(photoWidth * 2 / 3); // keep 3:2 ratio
+        const leftOffset  = -Math.round((photoWidth - canvasWidth) / 2);
 
-        // Photo dimensions – maintain 3:2 ratio (landscape)
-        const photoWidth = Math.round(canvasWidth * bleedScale);   // Slightly wider than A5
-        const photoHeight = Math.round(photoWidth * 2 / 3);        // Maintain 3:2 aspect ratio
+        console.log(`📐 Photo (bleed): ${photoWidth}×${photoHeight}px`);
+        console.log(`↔️ Center offset: ${leftOffset}px`);
 
-        // Horizontal offset to center bleed overflow equally
-        const leftOffset = -Math.round((photoWidth - canvasWidth) / 2);
+        // --- Oversized base canvas (to hold bleed safely) ---
+        const baseWidth  = Math.round(canvasWidth  * 1.06);
+        const baseHeight = Math.round(canvasHeight * 1.06);
+        const cropLeft = Math.round((baseWidth  - canvasWidth) / 2);
+        const cropTop  = Math.round((baseHeight - canvasHeight) / 2);
 
-        console.log(`📐 Photo (bleed): ${photoWidth}×${photoHeight}px (${(photoWidth * 2.54 / 300).toFixed(2)}×${(photoHeight * 2.54 / 300).toFixed(2)}cm at 300dpi)`);
-        console.log(`↔️ Left offset for centering: ${leftOffset}px`);
+        const tempFile = "/tmp/temp-composite.jpg";
 
-        // Read source image
-        const metadata = await sharp(localFile).metadata();
-        console.log(`📷 Original image: ${metadata.width}×${metadata.height}`);
+        try {
+          // --- Load & rotate original ---
+          const metadata = await sharp(localFile).metadata();
+          console.log(`📷 Original: ${metadata.width}×${metadata.height}`);
 
-        // Rotate to landscape
-        const rotatedImage = await sharp(localFile)
-          .rotate(90, { background: "white" })
-          .toBuffer();
-
-        // Resize + center crop to 3:2 ratio (landscape)
-        let resizedPhoto = await sharp(rotatedImage)
-          .resize(photoWidth, photoHeight, {
-            fit: "cover",
-            position: "center",
-            background: { r: 255, g: 255, b: 255, alpha: 1 }
-          })
-          .withMetadata({ icc: adobeICC })
-          .toBuffer();
-
-        // Validate dimensions
-        let resizedMetadata = await sharp(resizedPhoto).metadata();
-        console.log(`✓ Resized photo: ${resizedMetadata.width}×${resizedMetadata.height}px`);
-
-        // Safety: re-resize if rounding occurs
-        if (resizedMetadata.width !== photoWidth || resizedMetadata.height !== photoHeight) {
-          console.warn(`⚠️ Sharp rounding detected → correcting`);
-          resizedPhoto = await sharp(resizedPhoto)
-            .resize(photoWidth, photoHeight, { fit: "fill", kernel: "lanczos3" })
+          const rotatedImage = await sharp(localFile)
+            .rotate(90, { background: "white" })
             .toBuffer();
+
+          // --- Resize to 3:2 ratio (no distortion) ---
+          let resizedPhoto = await sharp(rotatedImage)
+            .resize(photoWidth, photoHeight, {
+              fit: "cover",
+              position: "center",
+            })
+            .toBuffer();
+
+          // --- Positioning ---
+          const totalPhotosHeight = photoHeight * 2;
+          const availableSpace = canvasHeight - totalPhotosHeight;
+          const gap = Math.max(1, Math.round(availableSpace / 3));
+          const firstPhotoTop  = cropTop + gap;
+          const secondPhotoTop = cropTop + gap * 2 + photoHeight;
+
+          console.log(`📍 Positions: top1=${firstPhotoTop}, top2=${secondPhotoTop}, left=${cropLeft + leftOffset}`);
+          console.log(`📏 Gap: ${(gap * 2.54 / 300).toFixed(2)} cm`);
+
+          // --- Composite on larger base ---
+          await sharp({
+            create: {
+              width: baseWidth,
+              height: baseHeight,
+              channels: 3,
+              background: "white",
+            },
+          })
+            .composite([
+              { input: resizedPhoto, top: firstPhotoTop, left: cropLeft + leftOffset },
+              { input: resizedPhoto, top: secondPhotoTop, left: cropLeft + leftOffset },
+            ])
+            .jpeg({ quality: 95 })
+            .toFile(tempFile);
+
+          // --- Crop exactly to A5 ---
+          await sharp(tempFile)
+            .extract({ left: cropLeft, top: cropTop, width: canvasWidth, height: canvasHeight })
+            .withMetadata({ icc: adobeICC, density: 300 })
+            .jpeg({ quality: 95 })
+            .toFile(processedFile);
+
+          console.log("✅ Created A5 with two 4×6 photos (bleed-safe, full coverage)");
+
+        } catch (err) {
+          console.error("❌ Sharp process failed:", err.message);
+          throw err;
+        } finally {
+          // --- Always delete temp file after use ---
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+              console.log("🧹 Cleaned up temp composite file.");
+            }
+          } catch (cleanupErr) {
+            console.warn("⚠️ Failed to delete temp file:", cleanupErr.message);
+          }
         }
-
-        // Calculate vertical positions
-        const totalPhotosHeight = photoHeight * 2;
-        const availableSpace = canvasHeight - totalPhotosHeight;
-        const gap = Math.max(1, Math.round(availableSpace / 3));  // Small consistent gaps
-
-        const firstPhotoTop = gap;
-        const secondPhotoTop = gap * 2 + photoHeight;
-
-        console.log(`📍 Positions: top1=${firstPhotoTop}, top2=${secondPhotoTop}, left=${leftOffset}`);
-        console.log(`📏 Gap ≈ ${(gap * 2.54 / 300).toFixed(2)} cm`);
-
-        // Composite onto A5 canvas
-        await sharp({
-          create: {
-            width: canvasWidth,
-            height: canvasHeight,
-            channels: 3,
-            background: "white",
-          },
-        })
-          .composite([
-            { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
-            { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
-          ])
-          .jpeg({ quality: 95 })
-          .withMetadata({ icc: adobeICC, density: 300 })
-          .toFile(processedFile);
-        console.log("✅ Created A5 with two 4×6 photos (with bleed – visually borderless, centered layout)");
       } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
