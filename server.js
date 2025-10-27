@@ -92,19 +92,21 @@ async function processJob(doc) {
     try {
       const layout = job.layout || job.options?.layout || "fullA5";
       console.log(`🧩 Layout mode: ${layout}`);
-      
+
       if (layout === "two4x6") {
-        console.log("🧩 Generating A5 with two 4×6 photos (2:3 ratio, maxed to 14.8cm width)...");
+        console.log("🧩 Generating A5 with two 4×6 photos (full width 14.8cm, 2:3 ratio)...");
 
         // Canvas setup - A5 vertical/portrait at 300 DPI
         const canvasWidth = 1748;   // A5 width: 14.8cm = 1748px
         const canvasHeight = 2480;  // A5 height: 21.0cm = 2480px
 
-        // Photo dimensions - maximize width to 14.8cm, maintain 2:3 ratio
-        const photoWidth = 1748;  // 14.8cm at 300dpi (full A5 width)
-        const photoHeight = Math.round(photoWidth * 2 / 3);  // 2:3 ratio = 1165px ≈ 9.87cm
+        // Photo dimensions - FULL WIDTH 14.8cm, height = 14.8cm * 3/2 for 2:3 ratio
+        // For 4×6 landscape: width should be the LONG side (6 units), height is SHORT side (4 units)
+        // Ratio 6:4 = 3:2, so if width = 14.8cm, height = 14.8 * (2/3) = 9.87cm
+        const photoWidth = canvasWidth;  // 1748px = 14.8cm (FULL A5 WIDTH)
+        const photoHeight = Math.round(canvasWidth * 2 / 3);  // 1165px ≈ 9.87cm (maintains 3:2 ratio)
 
-        console.log(`📐 Photo size: ${photoWidth}×${photoHeight}px (14.8×${(photoHeight * 2.54 / 300).toFixed(1)}cm at 300dpi)`);
+        console.log(`📐 Photo size: ${photoWidth}×${photoHeight}px (${(photoWidth * 2.54 / 300).toFixed(1)}×${(photoHeight * 2.54 / 300).toFixed(2)}cm at 300dpi)`);
 
         // Get original image
         const metadata = await sharp(localFile).metadata();
@@ -115,10 +117,10 @@ async function processJob(doc) {
           .rotate(90, { background: "white" })
           .toBuffer();
 
-        // Resize to exact dimensions (crop to 2:3 ratio if needed)
+        // Resize to exact dimensions (crop to 3:2 ratio if needed)
         let resizedPhoto = await sharp(rotatedImage)
           .resize(photoWidth, photoHeight, {
-            fit: "cover",  // Crop to exact 2:3 ratio
+            fit: "cover",  // Crop to exact 3:2 ratio (landscape 4×6)
             position: "center",
             background: { r: 255, g: 255, b: 255, alpha: 1 }
           })
@@ -150,22 +152,27 @@ async function processJob(doc) {
           throw new Error(`Photo dimensions ${resizedMetadata.width}×${resizedMetadata.height} exceed canvas ${canvasWidth}×${canvasHeight}`);
         }
 
-        // Calculate vertical spacing - minimal gaps
+        // Calculate vertical spacing - center both photos with equal gaps
         const totalPhotosHeight = photoHeight * 2;
         const availableSpace = canvasHeight - totalPhotosHeight;
         const gap = Math.max(1, Math.round(availableSpace / 3));  // Minimum 1px gap
 
+        // Center photos vertically with equal top/middle/bottom gaps
         const firstPhotoTop = gap;
         const secondPhotoTop = gap * 2 + photoHeight;
+        
+        // NO horizontal offset - photos are already full canvas width
+        const leftOffset = 0;
         
         // Safety check: ensure photos don't overflow canvas
         if (secondPhotoTop + photoHeight > canvasHeight) {
           throw new Error(`Photos overflow canvas: bottom position ${secondPhotoTop + photoHeight} exceeds ${canvasHeight}`);
         }
 
-        console.log(`📍 Positions: photo1 top=${firstPhotoTop}px, photo2 top=${secondPhotoTop}px`);
-        console.log(`📏 Vertical gaps: ${gap}px (${(gap * 2.54 / 300).toFixed(2)}cm each)`);
-        console.log(`📏 Total used: ${(totalPhotosHeight * 2.54 / 300).toFixed(1)}cm of 21cm, remaining: ${(availableSpace * 2.54 / 300).toFixed(1)}cm`);
+        console.log(`📍 Positions: photo1 top=${firstPhotoTop}px, photo2 top=${secondPhotoTop}px, left=${leftOffset}px`);
+        console.log(`📏 Vertical gaps: top=${gap}px, middle=${gap}px, bottom=${canvasHeight - secondPhotoTop - photoHeight}px`);
+        console.log(`📏 Gap in cm: ${(gap * 2.54 / 300).toFixed(2)}cm each`);
+        console.log(`📏 Total used: ${(totalPhotosHeight * 2.54 / 300).toFixed(1)}cm of 21cm`);
 
         // Create canvas and composite two photos
         await sharp({
@@ -177,14 +184,14 @@ async function processJob(doc) {
           },
         })
         .composite([
-          { input: resizedPhoto, top: firstPhotoTop, left: 0 },  // No horizontal offset - full width
-          { input: resizedPhoto, top: secondPhotoTop, left: 0 },
+          { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
+          { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
         ])
         .withMetadata({ icc: adobeICC, density: 300 })
         .jpeg({ quality: 95 })
         .toFile(processedFile);
 
-        console.log("✅ Created A5 with two 4×6 photos (14.8×9.87cm each, 2:3 ratio, minimal gaps)");
+        console.log("✅ Created A5 with two 4×6 photos (14.8×9.87cm each, full width, centered vertically)");
       } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
