@@ -94,87 +94,68 @@ async function processJob(doc) {
       console.log(`🧩 Layout mode: ${layout}`);
 
       if (layout === "two4x6") {
-        console.log("🧩 Generating A5 with two 4×6 photos (full width 14.8cm, 2:3 ratio)...");
+        console.log("🧩 Generating A5 with two 4×6 photos (with 5% bleed compensation for full coverage)...");
 
-        // Canvas setup - A5 vertical/portrait at 300 DPI
-        const canvasWidth = 1748;   // A5 width: 14.8cm = 1748px
-        const canvasHeight = 2480;  // A5 height: 21.0cm = 2480px
+        // Canvas setup – A5 vertical (300 DPI)
+        const canvasWidth = 1748;   // 14.8 cm = 1748 px
+        const canvasHeight = 2480;  // 21.0 cm = 2480 px
 
-        // Photo dimensions - FULL WIDTH 14.8cm, height = 14.8cm * 3/2 for 2:3 ratio
-        // For 4×6 landscape: width should be the LONG side (6 units), height is SHORT side (4 units)
-        // Ratio 6:4 = 3:2, so if width = 14.8cm, height = 14.8 * (2/3) = 9.87cm
-        const photoWidth = canvasWidth;  // 1748px = 14.8cm (FULL A5 WIDTH)
-        const photoHeight = Math.round(canvasWidth * 2 / 3);  // 1165px ≈ 9.87cm (maintains 3:2 ratio)
+        // 🩸 Add bleed compensation (≈ 4mm margin per side)
+        const bleedScale = 1.055;  // (14.8 + 0.4*2) / 14.8 ≈ 1.055
 
-        console.log(`📐 Photo size: ${photoWidth}×${photoHeight}px (${(photoWidth * 2.54 / 300).toFixed(1)}×${(photoHeight * 2.54 / 300).toFixed(2)}cm at 300dpi)`);
+        // Photo dimensions – maintain 3:2 ratio (landscape)
+        const photoWidth = Math.round(canvasWidth * bleedScale);   // Slightly wider than A5
+        const photoHeight = Math.round(photoWidth * 2 / 3);        // Maintain 3:2 aspect ratio
 
-        // Get original image
+        // Horizontal offset to center bleed overflow equally
+        const leftOffset = -Math.round((photoWidth - canvasWidth) / 2);
+
+        console.log(`📐 Photo (bleed): ${photoWidth}×${photoHeight}px (${(photoWidth * 2.54 / 300).toFixed(2)}×${(photoHeight * 2.54 / 300).toFixed(2)}cm at 300dpi)`);
+        console.log(`↔️ Left offset for centering: ${leftOffset}px`);
+
+        // Read source image
         const metadata = await sharp(localFile).metadata();
         console.log(`📷 Original image: ${metadata.width}×${metadata.height}`);
 
-        // Rotate image 90° to landscape orientation
+        // Rotate to landscape
         const rotatedImage = await sharp(localFile)
           .rotate(90, { background: "white" })
           .toBuffer();
 
-        // Resize to exact dimensions (crop to 3:2 ratio if needed)
+        // Resize + center crop to 3:2 ratio (landscape)
         let resizedPhoto = await sharp(rotatedImage)
           .resize(photoWidth, photoHeight, {
-            fit: "cover",  // Crop to exact 3:2 ratio (landscape 4×6)
+            fit: "cover",
             position: "center",
             background: { r: 255, g: 255, b: 255, alpha: 1 }
           })
           .withMetadata({ icc: adobeICC })
           .toBuffer();
 
-        // Verify resized photo dimensions match expectations
+        // Validate dimensions
         let resizedMetadata = await sharp(resizedPhoto).metadata();
         console.log(`✓ Resized photo: ${resizedMetadata.width}×${resizedMetadata.height}px`);
-        
-        // Safety clamp: if Sharp added extra pixels due to rounding, scale down to exact dimensions
+
+        // Safety: re-resize if rounding occurs
         if (resizedMetadata.width !== photoWidth || resizedMetadata.height !== photoHeight) {
-          console.warn(`⚠️ Sharp rounding detected! Actual: ${resizedMetadata.width}×${resizedMetadata.height}, Expected: ${photoWidth}×${photoHeight}`);
-          console.log(`🔧 Scaling down to exact dimensions...`);
-          
+          console.warn(`⚠️ Sharp rounding detected → correcting`);
           resizedPhoto = await sharp(resizedPhoto)
-            .resize(photoWidth, photoHeight, {
-              fit: "fill",  // Force exact dimensions by scaling
-              kernel: "lanczos3"  // High-quality downscaling
-            })
+            .resize(photoWidth, photoHeight, { fit: "fill", kernel: "lanczos3" })
             .toBuffer();
-          
-          resizedMetadata = await sharp(resizedPhoto).metadata();
-          console.log(`✓ Scaled to: ${resizedMetadata.width}×${resizedMetadata.height}px`);
-        }
-        
-        // Final safety check: ensure photo fits in canvas
-        if (resizedMetadata.width > canvasWidth || resizedMetadata.height > canvasHeight) {
-          throw new Error(`Photo dimensions ${resizedMetadata.width}×${resizedMetadata.height} exceed canvas ${canvasWidth}×${canvasHeight}`);
         }
 
-        // Calculate vertical spacing - center both photos with equal gaps
+        // Calculate vertical positions
         const totalPhotosHeight = photoHeight * 2;
         const availableSpace = canvasHeight - totalPhotosHeight;
-        const gap = Math.max(1, Math.round(availableSpace / 3));  // Minimum 1px gap
+        const gap = Math.max(1, Math.round(availableSpace / 3));  // Small consistent gaps
 
-        // Center photos vertically with equal top/middle/bottom gaps
         const firstPhotoTop = gap;
         const secondPhotoTop = gap * 2 + photoHeight;
-        
-        // NO horizontal offset - photos are already full canvas width
-        const leftOffset = 0;
-        
-        // Safety check: ensure photos don't overflow canvas
-        if (secondPhotoTop + photoHeight > canvasHeight) {
-          throw new Error(`Photos overflow canvas: bottom position ${secondPhotoTop + photoHeight} exceeds ${canvasHeight}`);
-        }
 
-        console.log(`📍 Positions: photo1 top=${firstPhotoTop}px, photo2 top=${secondPhotoTop}px, left=${leftOffset}px`);
-        console.log(`📏 Vertical gaps: top=${gap}px, middle=${gap}px, bottom=${canvasHeight - secondPhotoTop - photoHeight}px`);
-        console.log(`📏 Gap in cm: ${(gap * 2.54 / 300).toFixed(2)}cm each`);
-        console.log(`📏 Total used: ${(totalPhotosHeight * 2.54 / 300).toFixed(1)}cm of 21cm`);
+        console.log(`📍 Positions: top1=${firstPhotoTop}, top2=${secondPhotoTop}, left=${leftOffset}`);
+        console.log(`📏 Gap ≈ ${(gap * 2.54 / 300).toFixed(2)} cm`);
 
-        // Create canvas and composite two photos
+        // Composite onto A5 canvas
         await sharp({
           create: {
             width: canvasWidth,
@@ -183,15 +164,15 @@ async function processJob(doc) {
             background: "white",
           },
         })
-        .composite([
-          { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
-          { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
-        ])
-        .withMetadata({ icc: adobeICC, density: 300 })
-        .jpeg({ quality: 95 })
-        .toFile(processedFile);
+          .composite([
+            { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
+            { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
+          ])
+          .withMetadata({ icc: adobeICC, density: 300 })
+          .jpeg({ quality: 95 })
+          .toFile(processedFile);
 
-        console.log("✅ Created A5 with two 4×6 photos (14.8×9.87cm each, full width, centered vertically)");
+        console.log("✅ Created A5 with two 4×6 photos (with bleed – visually borderless, centered layout)");
       } else {
         console.log("🖼️ Generating full A5 photo...");
         await sharp(localFile)
