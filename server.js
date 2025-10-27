@@ -90,90 +90,168 @@ async function processJob(doc) {
     const processedFile = path.join("/tmp", `processed-${Date.now()}-${job.fileName}`);
 
     try {
-      const layout = job.layout || job.options?.layout || "fullA5";
+      const layout = job.layout || job.options?.layout || "a5";
       console.log(`🧩 Layout mode: ${layout}`);
 
-      if (layout === "two4x6") {
-        console.log("🧩 Generating A5 with two 4×6 photos (bleed-safe, auto-cleanup)...");
+      // --------------------------------------------------------------------------
+      // 🖼️ SINGLE A5 PHOTO (Portrait - 2:3 ratio target)
+      // --------------------------------------------------------------------------
+      if (layout === "a5" || layout === "fullA5") {
+        console.log("🖼️ Generating single A5 photo (auto-rotate + no crop + white padding if needed)...");
 
-        // --- A5 portrait at 300 DPI ---
-        const canvasWidth = 1748;   // 14.8 cm
-        const canvasHeight = 2480;  // 21.0 cm
+        const canvasWidth = 1748;   // 14.8 cm @ 300 DPI
+        const canvasHeight = 2480;  // 21.0 cm @ 300 DPI
 
-        // --- Bleed settings (≈4mm per side) ---
-        const bleedScale = 1.055;
-        const photoWidth  = Math.round(canvasWidth * bleedScale);
-        const photoHeight = Math.round(photoWidth * 2 / 3); // keep 3:2 ratio
-        const leftOffset  = -Math.round((photoWidth - canvasWidth) / 2);
+        const metadata = await sharp(localFile).metadata();
+        const ratio = metadata.width / metadata.height;
+        const targetRatio = 2 / 3; // Portrait (A5 vertical)
 
-        console.log(`📐 Photo (bleed): ${photoWidth}×${photoHeight}px`);
-        console.log(`↔️ Center offset: ${leftOffset}px`);
+        let imageBuffer = await sharp(localFile).toBuffer();
+        let rotated = false;
 
-        // --- Oversized base canvas (to hold bleed safely) ---
-        const baseWidth  = Math.round(canvasWidth  * 1.06);
-        const baseHeight = Math.round(canvasHeight * 1.06);
-        const cropLeft = Math.round((baseWidth  - canvasWidth) / 2);
-        const cropTop  = Math.round((baseHeight - canvasHeight) / 2);
+        // 🔄 If the image is landscape (3:2), rotate it to portrait
+        if (ratio > 1.0) {
+          console.log("↩️ Rotating landscape image to portrait for A5...");
+          imageBuffer = await sharp(localFile).rotate(90, { background: "white" }).toBuffer();
+          rotated = true;
+        }
 
-        const tempFile = "/tmp/temp-composite.jpg";
+        // Check ratio again after potential rotation
+        const newMeta = await sharp(imageBuffer).metadata();
+        const newRatio = newMeta.width / newMeta.height;
 
-        try {
-          // --- Load & rotate original ---
-          const metadata = await sharp(localFile).metadata();
-          console.log(`📷 Original: ${metadata.width}×${metadata.height}`);
+        let paddedImage;
 
-          const rotatedImage = await sharp(localFile)
-            .rotate(90, { background: "white" })
-            .toBuffer();
+        // If not close to 2:3 ratio, pad it with white
+        if (Math.abs(newRatio - targetRatio) > 0.01) {
+          console.log(`⚙️ Adding white padding for ratio ${newRatio.toFixed(2)} → 0.67 (2:3 target)`);
 
-          // --- Resize to 3:2 ratio (no distortion) ---
-          let resizedPhoto = await sharp(rotatedImage)
-            .resize(photoWidth, photoHeight, {
-              fit: "cover",
-              position: "center",
+          let newWidth = newMeta.width;
+          let newHeight = newMeta.height;
+          if (newRatio > targetRatio) newHeight = Math.round(newMeta.width / targetRatio);
+          else newWidth = Math.round(newMeta.height * targetRatio);
+
+          const padX = Math.max(0, Math.round((newWidth - newMeta.width) / 2));
+          const padY = Math.max(0, Math.round((newHeight - newMeta.height) / 2));
+
+          paddedImage = await sharp(imageBuffer)
+            .extend({
+              top: padY,
+              bottom: padY,
+              left: padX,
+              right: padX,
+              background: "white",
             })
             .toBuffer();
 
-          // --- Positioning ---
+          console.log(`🧾 Padded: ${newWidth}×${newHeight}px (added ${padX}px sides, ${padY}px top/bottom)`);
+        } else {
+          paddedImage = imageBuffer;
+          console.log("✅ Image already near 2:3 ratio, no padding applied.");
+        }
+
+        // Resize to A5 (fit: contain ensures no crop)
+        await sharp(paddedImage)
+          .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
+          .withMetadata({ icc: adobeICC, density: 300 })
+          .jpeg({ quality: 95 })
+          .toFile(processedFile);
+
+        console.log(`✅ A5 photo ready (no crop, rotated=${rotated})`);
+
+      // --------------------------------------------------------------------------
+      // 🧩 TWO 4×6 PHOTOS on A5 (Landscape - 3:2 ratio target)
+      // --------------------------------------------------------------------------
+      } else if (layout === "two4x6") {
+        console.log("🧩 Generating A5 with two 4×6 photos (auto pad, no crop, only rotate if portrait)...");
+
+        const canvasWidth = 1748;   // 14.8 cm
+        const canvasHeight = 2480;  // 21.0 cm
+        const photoWidth = canvasWidth; // each photo uses full width
+        const photoHeight = Math.round(photoWidth * 2 / 3); // maintain 3:2
+        const tempFile = "/tmp/temp-composite.jpg";
+
+        try {
+          const metadata = await sharp(localFile).metadata();
+          const ratio = metadata.width / metadata.height;
+          const targetRatio = 3 / 2;
+
+          let imageBuffer = await sharp(localFile).toBuffer();
+          let rotated = false;
+
+          // Rotate only if portrait (2:3)
+          if (ratio < 1.0) {
+            console.log("↩️ Rotating portrait image to landscape for 4×6...");
+            imageBuffer = await sharp(localFile).rotate(90, { background: "white" }).toBuffer();
+            rotated = true;
+          }
+
+          const newMeta = await sharp(imageBuffer).metadata();
+          const newRatio = newMeta.width / newMeta.height;
+          let paddedImage;
+
+          // Add white padding only if not already 3:2
+          if (Math.abs(newRatio - targetRatio) > 0.01) {
+            console.log(`⚙️ Adding white padding for ratio ${newRatio.toFixed(2)} → 1.50 (3:2 target)`);
+
+            let newWidth = newMeta.width;
+            let newHeight = newMeta.height;
+            if (newRatio > targetRatio) newHeight = Math.round(newMeta.width / targetRatio);
+            else newWidth = Math.round(newMeta.height * targetRatio);
+
+            const padX = Math.max(0, Math.round((newWidth - newMeta.width) / 2));
+            const padY = Math.max(0, Math.round((newHeight - newMeta.height) / 2));
+
+            paddedImage = await sharp(imageBuffer)
+              .extend({
+                top: padY,
+                bottom: padY,
+                left: padX,
+                right: padX,
+                background: "white",
+              })
+              .toBuffer();
+
+            console.log(`🧾 Padded to ${newWidth}×${newHeight}px (added ${padX}px sides, ${padY}px top/bottom)`);
+          } else {
+            paddedImage = imageBuffer;
+            console.log("✅ Image already 3:2 ratio, no padding applied.");
+          }
+
+          // Resize for 4×6 (3:2 ratio)
+          const resizedPhoto = await sharp(paddedImage)
+            .resize(photoWidth, photoHeight, { fit: "contain", background: "white" })
+            .toBuffer();
+
+          // Vertical stacking positions
           const totalPhotosHeight = photoHeight * 2;
           const availableSpace = canvasHeight - totalPhotosHeight;
           const gap = Math.max(1, Math.round(availableSpace / 3));
-          const firstPhotoTop  = cropTop + gap;
-          const secondPhotoTop = cropTop + gap * 2 + photoHeight;
+          const firstPhotoTop = gap;
+          const secondPhotoTop = gap * 2 + photoHeight;
 
-          console.log(`📍 Positions: top1=${firstPhotoTop}, top2=${secondPhotoTop}, left=${cropLeft + leftOffset}`);
-          console.log(`📏 Gap: ${(gap * 2.54 / 300).toFixed(2)} cm`);
-
-          // --- Composite on larger base ---
           await sharp({
             create: {
-              width: baseWidth,
-              height: baseHeight,
+              width: canvasWidth,
+              height: canvasHeight,
               channels: 3,
               background: "white",
             },
           })
             .composite([
-              { input: resizedPhoto, top: firstPhotoTop, left: cropLeft + leftOffset },
-              { input: resizedPhoto, top: secondPhotoTop, left: cropLeft + leftOffset },
+              { input: resizedPhoto, top: firstPhotoTop, left: 0 },
+              { input: resizedPhoto, top: secondPhotoTop, left: 0 },
             ])
-            .jpeg({ quality: 95 })
-            .toFile(tempFile);
-
-          // --- Crop exactly to A5 ---
-          await sharp(tempFile)
-            .extract({ left: cropLeft, top: cropTop, width: canvasWidth, height: canvasHeight })
             .withMetadata({ icc: adobeICC, density: 300 })
             .jpeg({ quality: 95 })
             .toFile(processedFile);
 
-          console.log("✅ Created A5 with two 4×6 photos (bleed-safe, full coverage)");
+          console.log(`✅ Created A5 with two 4×6 photos (rotated=${rotated}, no crop)`);
 
         } catch (err) {
-          console.error("❌ Sharp process failed:", err.message);
+          console.error("❌ Sharp processing failed:", err.message);
           throw err;
         } finally {
-          // --- Always delete temp file after use ---
           try {
             if (fs.existsSync(tempFile)) {
               fs.unlinkSync(tempFile);
@@ -183,18 +261,22 @@ async function processJob(doc) {
             console.warn("⚠️ Failed to delete temp file:", cleanupErr.message);
           }
         }
+
+      // --------------------------------------------------------------------------
+      // 🪶 DEFAULT fallback
+      // --------------------------------------------------------------------------
       } else {
-        console.log("🖼️ Generating full A5 photo...");
+        console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
         await sharp(localFile)
-          .resize(1748, 2480, { fit: "cover" })
-          .withMetadata({ icc: adobeICC, density: 300 }) // ✅ Add DPI here too
+          .resize(1748, 2480, { fit: "contain", background: "white" })
+          .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
-          
+
         console.log(`✅ Full A5 image processed: ${processedFile}`);
       }
 
-      console.log(`🎨 Converted image to Adobe RGB + layout processed: ${processedFile}`);
+      console.log(`🎨 Image processed and converted: ${processedFile}`);
     } catch (err) {
       console.error("⚠️ Sharp layout/color conversion failed, using original file instead:", err);
     }
@@ -202,8 +284,8 @@ async function processJob(doc) {
     // 🔹 Force every print to use A5 paper
     const paperOption = "-o media=A5";
     const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${processedFile || localFile}"`;
-
     console.log(`🖨️ Running print command: ${printCommand}`);
+
 
     await new Promise((resolve, reject) => {
       exec(printCommand, (err, stdout, stderr) => {
