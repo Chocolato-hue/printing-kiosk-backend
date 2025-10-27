@@ -168,10 +168,9 @@ async function processJob(doc) {
             { input: resizedPhoto, top: firstPhotoTop, left: leftOffset },
             { input: resizedPhoto, top: secondPhotoTop, left: leftOffset },
           ])
-          .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
+          .withMetadata({ icc: adobeICC, density: 300 })
           .toFile(processedFile);
-
         console.log("✅ Created A5 with two 4×6 photos (with bleed – visually borderless, centered layout)");
       } else {
         console.log("🖼️ Generating full A5 photo...");
