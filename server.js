@@ -160,119 +160,109 @@ async function processJob(doc) {
         console.log(`✅ A5 photo ready (no crop, rotated=${rotated})`);
 
       // --------------------------------------------------------------------------
-      // 🧩 TWO A6 PHOTOS on A5 (Portrait - √2 ratio target)
-// --------------------------------------------------------------------------
-} else if (layout === "twoA6" || layout === "two4x6") {
-  console.log("🧩 Generating A5 with two A6 photos (no crop, full portrait fit)...");
+      // --------------------------------------------------------------------------
+      // 🧩 TWO A6 PHOTOS on A5 (Landscape - real A6 size, stacked vertically)
+      // --------------------------------------------------------------------------
+      } else if (layout === "two4x6" || layout === "twoA6") {
+        console.log("🧩 Generating A5 with two real A6 landscape photos (no crop, rotate if needed)...");
+        const canvasWidth = 1748;   // A5: 14.8 cm
+        const canvasHeight = 2480;  // A5: 21.0 cm
+        const photoWidth = 1748;    // A6 landscape width
+        const photoHeight = 1240;   // A6 landscape height
+        const tempFile = "/tmp/temp-composite.jpg";
+        try {
+          const metadata = await sharp(localFile).metadata();
+          const ratio = metadata.width / metadata.height;
+          const targetRatio = 3 / 2;
+          let imageBuffer = await sharp(localFile).toBuffer();
+          let rotated = false;
+          // 🔄 Rotate portrait (2:3) to landscape
+          if (ratio < 1.0) {
+            console.log("↩️ Rotating portrait image to landscape for A6...");
+            imageBuffer = await sharp(localFile).rotate(90, { background: "white" }).toBuffer();
+            rotated = true;
+          }
+          const newMeta = await sharp(imageBuffer).metadata();
+          const newRatio = newMeta.width / newMeta.height;
+          let paddedImage;
+          // Add white padding if not 3:2
+          if (Math.abs(newRatio - targetRatio) > 0.01) {
+            console.log(`⚙️ Adding white padding for ratio ${newRatio.toFixed(2)} → 1.50 (3:2 target)`);
+            let newWidth = newMeta.width;
+            let newHeight = newMeta.height;
+            if (newRatio > targetRatio) newHeight = Math.round(newMeta.width / targetRatio);
+            else newWidth = Math.round(newMeta.height * targetRatio);
+            const padX = Math.max(0, Math.round((newWidth - newMeta.width) / 2));
+            const padY = Math.max(0, Math.round((newHeight - newMeta.height) / 2));
+            paddedImage = await sharp(imageBuffer)
+              .extend({
+                top: padY,
+                bottom: padY,
+                left: padX,
+                right: padX,
+                background: "white",
+              })
+              .toBuffer();
+            console.log(`🧾 Padded to ${newWidth}×${newHeight}px (added ${padX}px sides, ${padY}px top/bottom)`);
+          } else {
+            paddedImage = imageBuffer;
+            console.log("✅ Image already 3:2 ratio, no padding applied.");
+          }
+          // Resize for real A6
+          const resizedPhoto = await sharp(paddedImage)
+            .resize(photoWidth, photoHeight, { fit: "contain", background: "white" })
+            .toBuffer();
+          // Vertical stacking (two A6s = 1240 × 2 = 2480, perfect fit)
+          const firstPhotoTop = 0;
+          const secondPhotoTop = photoHeight;
+          await sharp({
+            create: {
+              width: canvasWidth,
+              height: canvasHeight,
+              channels: 3,
+              background: "white",
+            },
+          })
+            .composite([
+              { input: resizedPhoto, top: firstPhotoTop, left: 0 },
+              { input: resizedPhoto, top: secondPhotoTop, left: 0 },
+            ])
+            .withMetadata({ icc: adobeICC, density: 300 })
+            .jpeg({ quality: 95 })
+            .toFile(processedFile);
+          console.log(`✅ Created A5 with two real A6 landscape photos (rotated=${rotated}, no crop)`);
+        } catch (err) {
+          console.error("❌ Sharp processing failed:", err.message);
+          throw err;
+        } finally {
+          try {
+            if (fs.existsSync(tempFile)) {
+              fs.unlinkSync(tempFile);
+              console.log("🧹 Cleaned up temp composite file.");
+            }
+          } catch (cleanupErr) {
+            console.warn("⚠️ Failed to delete temp file:", cleanupErr.message);
+          }
+        }
 
-  const canvasWidth = 1748;   // A5 width (14.8 cm @ 300 DPI)
-  const canvasHeight = 2480;  // A5 height (21.0 cm @ 300 DPI)
-  const photoWidth = canvasWidth;
-  const photoHeight = Math.round(canvasHeight / 2); // half the page = A6
+      // --------------------------------------------------------------------------
+      // 🪶 DEFAULT fallback
+      // --------------------------------------------------------------------------
+      } else {
+        console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
+        await sharp(localFile)
+          .resize(1748, 2480, { fit: "contain", background: "white" })
+          .withMetadata({ icc: adobeICC, density: 300 })
+          .jpeg({ quality: 95 })
+          .toFile(processedFile);
 
-  try {
-    // Read source metadata
-    const metadata = await sharp(localFile).metadata();
-    const ratio = metadata.width / metadata.height;
-    const targetRatio = canvasWidth / photoHeight; // ≈ √2 (A6)
+        console.log(`✅ Full A5 image processed: ${processedFile}`);
+      }
 
-    let imageBuffer = await sharp(localFile).toBuffer();
-    let rotated = false;
-
-    // 🔄 Rotate landscape to portrait
-    if (ratio > 1.0) {
-      console.log("↩️ Rotating landscape image to portrait for A6...");
-      imageBuffer = await sharp(localFile).rotate(90, { background: "white" }).toBuffer();
-      rotated = true;
+      console.log(`🎨 Image processed and converted: ${processedFile}`);
+    } catch (err) {
+      console.error("⚠️ Sharp layout/color conversion failed, using original file instead:", err);
     }
-
-    // Get updated ratio after rotation
-    const newMeta = await sharp(imageBuffer).metadata();
-    const newRatio = newMeta.width / newMeta.height;
-
-    // ⚙️ Add padding if image ratio ≠ √2 (so nothing is cropped)
-    let paddedImage;
-    if (Math.abs(newRatio - targetRatio) > 0.01) {
-      console.log(`⚙️ Adding white padding for ratio ${newRatio.toFixed(2)} → ${targetRatio.toFixed(2)} (A6 target)`);
-
-      let newWidth = newMeta.width;
-      let newHeight = newMeta.height;
-      if (newRatio > targetRatio) newHeight = Math.round(newMeta.width / targetRatio);
-      else newWidth = Math.round(newMeta.height * targetRatio);
-
-      const padX = Math.max(0, Math.round((newWidth - newMeta.width) / 2));
-      const padY = Math.max(0, Math.round((newHeight - newMeta.height) / 2));
-
-      paddedImage = await sharp(imageBuffer)
-        .extend({
-          top: padY,
-          bottom: padY,
-          left: padX,
-          right: padX,
-          background: "white",
-        })
-        .toBuffer();
-
-      console.log(`🧾 Padded to ${newWidth}×${newHeight}px (added ${padX}px sides, ${padY}px top/bottom)`);
-    } else {
-      paddedImage = imageBuffer;
-      console.log("✅ Image already near A6 ratio, no padding applied.");
-    }
-
-    // Resize to A6 (fit inside, no crop)
-    const resizedPhoto = await sharp(paddedImage)
-      .resize(photoWidth, photoHeight, { fit: "contain", background: "white" })
-      .toBuffer();
-
-    // 🧭 Center both photos vertically & horizontally
-    const left = Math.round((canvasWidth - photoWidth) / 2);
-    const totalPhotosHeight = photoHeight * 2;
-    const availableSpace = canvasHeight - totalPhotosHeight;
-    const gap = Math.max(1, Math.round(availableSpace / 3));
-    const firstPhotoTop = gap;
-    const secondPhotoTop = gap * 2 + photoHeight;
-
-    await sharp({
-      create: {
-        width: canvasWidth,
-        height: canvasHeight,
-        channels: 3,
-        background: "white",
-      },
-    })
-      .composite([
-        { input: resizedPhoto, top: firstPhotoTop, left },
-        { input: resizedPhoto, top: secondPhotoTop, left },
-      ])
-      .withMetadata({ icc: adobeICC, density: 300 })
-      .jpeg({ quality: 95 })
-      .toFile(processedFile);
-
-    console.log(`✅ Created A5 with two A6 photos (rotated=${rotated}, no crop, centered)`);
-
-  } catch (err) {
-    console.error("❌ Sharp processing failed:", err.message);
-    throw err;
-  } 
-
-  // --------------------------------------------------------------------------
-  // 🪶 DEFAULT fallback
-  // --------------------------------------------------------------------------
-  } else {
-    console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
-    await sharp(localFile)
-      .resize(1748, 2480, { fit: "contain", background: "white" })
-      .withMetadata({ icc: adobeICC, density: 300 })
-      .jpeg({ quality: 95 })
-      .toFile(processedFile);
-
-    console.log(`✅ Full A5 image processed: ${processedFile}`);
-  }
-
-    console.log(`🎨 Image processed and converted: ${processedFile}`);
-  } catch (err) {
-    console.error("⚠️ Sharp layout/color conversion failed, using original file instead:", err);
-  }
 
     // 🔹 Force every print to use A5 paper
     const paperOption = "-o media=A5";
