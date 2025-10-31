@@ -85,7 +85,7 @@ async function processJob(doc) {
     const sharp = require("sharp");
 
     // 🔹 Convert and process image with Sharp + layout logic
-    const sRGBICC = "/usr/share/color/icc/sRGB.icc";
+    const adobeICC = "/usr/share/color/icc/AdobeRGB1998.icc";
     const convertedFile = path.join("/tmp", `converted-${Date.now()}-${job.fileName}`);
     const processedFile = path.join("/tmp", `processed-${Date.now()}-${job.fileName}`);
 
@@ -152,14 +152,12 @@ async function processJob(doc) {
 
         // Resize to A5 (fit: contain ensures no crop)
         await sharp(paddedImage)
-          .withMetadata({ icc: sRGBICC })
-          .toColorspace("srgb")
           .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
-          .withMetadata({ icc: sRGBICC, density: 300 })
+          .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
-        console.log(`✅ A5 photo ready (sRGB, no crop, rotated=${rotated})`);
+        console.log(`✅ A5 photo ready (no crop, rotated=${rotated})`);
 
       // --------------------------------------------------------------------------
       // --------------------------------------------------------------------------
@@ -229,7 +227,7 @@ async function processJob(doc) {
               { input: resizedPhoto, top: firstPhotoTop, left: 0 },
               { input: resizedPhoto, top: secondPhotoTop, left: 0 },
             ])
-            .withMetadata({ icc: sRGBICC, density: 300 })
+            .withMetadata({ icc: adobeICC, density: 300 })
             .jpeg({ quality: 95 })
             .toFile(processedFile);
           console.log(`✅ Created A5 with two real A6 landscape photos (rotated=${rotated}, no crop)`);
@@ -252,11 +250,9 @@ async function processJob(doc) {
       // --------------------------------------------------------------------------
       } else {
         console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
-        await sharp(paddedImage)
-          .withMetadata({ icc: sRGBICC })
-          .toColorspace("srgb") // 🔹 force color conversion to sRGB
-          .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
-          .withMetadata({ icc: sRGBICC, density: 300 })
+        await sharp(localFile)
+          .resize(1748, 2480, { fit: "contain", background: "white" })
+          .withMetadata({ icc: adobeICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
