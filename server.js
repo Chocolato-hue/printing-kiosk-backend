@@ -266,7 +266,7 @@ async function processJob(doc) {
 
     // 🔹 Force every print to use A5 paper
     //const paperOption = "-o media=A5";
-    const paperOption = "-o media=Custom.377x533";
+    const paperOption = "-o media=Custom.360x505";
 
     const printCommand = `lp -d ${PRINTER_ID} ${paperOption} ${fitOption} ${copiesOption} "${processedFile || localFile}"`;
     console.log(`🖨️ Running print command: ${printCommand}`);
