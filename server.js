@@ -1,4 +1,9 @@
 require("dotenv").config();
+console.log("ENV CHECK:", {
+  PRINTER_ID: process.env.PRINTER_ID,
+  FRONTEND_URL: process.env.FRONTEND_URL
+});
+
 const express = require("express");
 const cors = require("cors");
 const { exec } = require("child_process");
