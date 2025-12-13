@@ -5,6 +5,7 @@ const { exec } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const admin = require("firebase-admin");
+const QRCode = require("qrcode");
 
 
 // 🔑 Printer ID
@@ -343,6 +344,63 @@ db.collection("printJobs")
 
 // 🔹 Start Express server
 const PORT = process.env.PORT || 3001;
+// 🖨️ Printer QR code (print-friendly page)
+app.get("/printer/qr/view", async (req, res) => {
+  try {
+    const FRONTEND_URL = process.env.FRONTEND_URL;
+    const PRINTER_ID = process.env.PRINTER_ID;
+
+    if (!FRONTEND_URL || !PRINTER_ID) {
+      return res.status(500).send("Missing FRONTEND_URL or PRINTER_ID");
+    }
+
+    // This URL will auto-select & lock the printer
+    const qrUrl = `${FRONTEND_URL}/upload?printerId=${PRINTER_ID}&lock=1`;
+
+    // Generate QR image (base64)
+    const qrImage = await QRCode.toDataURL(qrUrl);
+
+    // Send simple printable HTML
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Printer QR</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              text-align: center;
+              padding: 40px;
+            }
+            img {
+              width: 300px;
+              height: 300px;
+            }
+            .printer-id {
+              margin-top: 16px;
+              font-size: 18px;
+              font-weight: bold;
+            }
+            .hint {
+              margin-top: 8px;
+              color: #555;
+            }
+          </style>
+        </head>
+        <body>
+          <h2>Scan to Print</h2>
+          <img src="${qrImage}" alt="Printer QR Code" />
+          <div class="printer-id">Printer ID: ${PRINTER_ID}</div>
+          <div class="hint">Stick this QR on the printer</div>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error("Failed to generate printer QR:", err);
+    res.status(500).send("Failed to generate QR");
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Printer backend API running on http://localhost:${PORT}`);
 });
