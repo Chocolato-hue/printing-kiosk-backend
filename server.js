@@ -159,7 +159,7 @@ async function processJob(doc) {
         await sharp(paddedImage)
           .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
           .modulate({ brightness: 1.05, saturation: 1.1 })  // adjust overall brightness/saturation
-          .linear([1.05, 0.95, 1.0])                        // R, G, B adjustments for warm skin tones
+          .linear([1.05, 0.95, 1.0], [0, 0, 0])                  // R, G, B adjustments for warm skin tones
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
@@ -234,7 +234,7 @@ async function processJob(doc) {
               { input: resizedPhoto, top: secondPhotoTop, left: 0 },
             ])
             .modulate({ brightness: 1.05, saturation: 1.1 })  // adjust overall brightness/saturation
-            .linear(1.05, 0.95, 1.0)                         // R, G, B adjustments for warmer skin tones
+            .linear([1.05, 0.95, 1.0], [0, 0, 0])
             .jpeg({ quality: 95 })
             .toFile(processedFile);
           console.log(`✅ Created A5 with two real A6 landscape photos (rotated=${rotated}, no crop)`);
@@ -260,7 +260,7 @@ async function processJob(doc) {
         await sharp(localFile)
           .resize(1748, 2480, { fit: "contain", background: "white" })
           .modulate({ brightness: 1.05, saturation: 1.1 })  // adjust overall brightness/saturation
-          .linear(1.05, 0.95, 1.0)                         // R, G, B adjustments for warmer skin tones
+          .linear([1.05, 0.95, 1.0], [0, 0, 0])                        // R, G, B adjustments for warmer skin tones
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
