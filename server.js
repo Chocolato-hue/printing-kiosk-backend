@@ -84,10 +84,15 @@ async function processJob(doc) {
 
     const sharp = require("sharp");
 
-    // 🔹 Convert and process image with Sharp + layout logic
-    const adobeICC = "/usr/share/color/icc/AdobeRGB1998.icc";
+    // 🔹 Prepare Sharp processing variables
     const convertedFile = path.join("/tmp", `converted-${Date.now()}-${job.fileName}`);
     const processedFile = path.join("/tmp", `processed-${Date.now()}-${job.fileName}`);
+
+    // Optional: RGB / brightness adjustments for more natural skin tones
+    const sharpOptions = {
+      modulate: { brightness: 1.05, saturation: 1.1 }, // tweak to taste
+      linear: [1.05, 0.95, 1.0] // R, G, B correction
+    };
 
     try {
       const layout = job.layout || job.options?.layout || "a5";
@@ -153,7 +158,8 @@ async function processJob(doc) {
         // Resize to A5 (fit: contain ensures no crop)
         await sharp(paddedImage)
           .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
-          .withMetadata({ icc: adobeICC, density: 300 })
+          .modulate({ brightness: 1.05, saturation: 1.1 })  // adjust overall brightness/saturation
+          .linear([1.05, 0.95, 1.0])                        // R, G, B adjustments for warm skin tones
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
@@ -227,7 +233,8 @@ async function processJob(doc) {
               { input: resizedPhoto, top: firstPhotoTop, left: 0 },
               { input: resizedPhoto, top: secondPhotoTop, left: 0 },
             ])
-            .withMetadata({ icc: adobeICC, density: 300 })
+            .modulate({ brightness: 1.05, saturation: 1.1 })  // adjust overall brightness/saturation
+            .linear(1.05, 0.95, 1.0)                         // R, G, B adjustments for warmer skin tones
             .jpeg({ quality: 95 })
             .toFile(processedFile);
           console.log(`✅ Created A5 with two real A6 landscape photos (rotated=${rotated}, no crop)`);
@@ -252,7 +259,8 @@ async function processJob(doc) {
         console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
         await sharp(localFile)
           .resize(1748, 2480, { fit: "contain", background: "white" })
-          .withMetadata({ icc: adobeICC, density: 300 })
+          .modulate({ brightness: 1.05, saturation: 1.1 })  // adjust overall brightness/saturation
+          .linear(1.05, 0.95, 1.0)                         // R, G, B adjustments for warmer skin tones
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
