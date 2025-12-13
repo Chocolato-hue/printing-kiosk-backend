@@ -152,6 +152,10 @@ async function processJob(doc) {
         // Resize to A5 (fit: contain ensures no crop)
         await sharp(paddedImage)
           .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
+          .modulate({
+            brightness: 1.10,   // adjust here
+            saturation: 1.05
+          })
           .withMetadata({ icc: srgbICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
@@ -226,6 +230,10 @@ async function processJob(doc) {
               { input: resizedPhoto, top: firstPhotoTop, left: 0 },
               { input: resizedPhoto, top: secondPhotoTop, left: 0 },
             ])
+            .modulate({
+              brightness: 1.10,   // adjust here
+              saturation: 1.05
+            })
             .withMetadata({ icc: srgbICC, density: 300 })
             .jpeg({ quality: 95 })
             .toFile(processedFile);
@@ -251,6 +259,10 @@ async function processJob(doc) {
         console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
         await sharp(localFile)
           .resize(1748, 2480, { fit: "contain", background: "white" })
+          .modulate({
+            brightness: 1.10,   // adjust here
+            saturation: 1.05
+          })
           .withMetadata({ icc: srgbICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
