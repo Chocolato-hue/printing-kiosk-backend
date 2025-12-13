@@ -88,7 +88,6 @@ async function processJob(doc) {
     const adobeICC = "/usr/share/color/icc/AdobeRGB1998.icc";
     const convertedFile = path.join("/tmp", `converted-${Date.now()}-${job.fileName}`);
     const processedFile = path.join("/tmp", `processed-${Date.now()}-${job.fileName}`);
-
     try {
       const layout = job.layout || job.options?.layout || "a5";
       console.log(`🧩 Layout mode: ${layout}`);
