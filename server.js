@@ -85,7 +85,7 @@ async function processJob(doc) {
     const sharp = require("sharp");
 
     // 🔹 Convert and process image with Sharp + layout logic
-    const adobeICC = "/usr/share/color/icc/AdobeRGB1998.icc";
+    const srgbICC = "/usr/share/color/icc/sRGB.icc";
     const convertedFile = path.join("/tmp", `converted-${Date.now()}-${job.fileName}`);
     const processedFile = path.join("/tmp", `processed-${Date.now()}-${job.fileName}`);
     try {
@@ -152,7 +152,7 @@ async function processJob(doc) {
         // Resize to A5 (fit: contain ensures no crop)
         await sharp(paddedImage)
           .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
-          .withMetadata({ icc: adobeICC, density: 300 })
+          .withMetadata({ icc: srgbICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
@@ -226,7 +226,7 @@ async function processJob(doc) {
               { input: resizedPhoto, top: firstPhotoTop, left: 0 },
               { input: resizedPhoto, top: secondPhotoTop, left: 0 },
             ])
-            .withMetadata({ icc: adobeICC, density: 300 })
+            .withMetadata({ icc: srgbICC, density: 300 })
             .jpeg({ quality: 95 })
             .toFile(processedFile);
           console.log(`✅ Created A5 with two real A6 landscape photos (rotated=${rotated}, no crop)`);
@@ -251,7 +251,7 @@ async function processJob(doc) {
         console.log("🖼️ Generating full A5 photo (default mode, no crop)...");
         await sharp(localFile)
           .resize(1748, 2480, { fit: "contain", background: "white" })
-          .withMetadata({ icc: adobeICC, density: 300 })
+          .withMetadata({ icc: srgbICC, density: 300 })
           .jpeg({ quality: 95 })
           .toFile(processedFile);
 
