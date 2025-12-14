@@ -362,7 +362,7 @@ app.get("/printer/qr/view", async (req, res) => {
     }
 
     // This URL will auto-select & lock the printer
-    const qrUrl = `${FRONTEND_URL}/upload?printerId=${PRINTER_ID}&lock=1`;
+    const qrUrl = `${FRONTEND_URL}/?printerId=${PRINTER_ID}&lock=1`;
 
     // Generate QR image (base64)
     const qrImage = await QRCode.toDataURL(qrUrl);
