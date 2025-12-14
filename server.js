@@ -59,6 +59,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.use(express.static(path.join(__dirname, "dist")));
+
 // Health check
 app.get("/status", (req, res) => {
   res.json({ printerId: PRINTER_ID, status: "running" });
@@ -404,6 +406,9 @@ app.get("/printer/qr/view", async (req, res) => {
     console.error("Failed to generate printer QR:", err);
     res.status(500).send("Failed to generate QR");
   }
+});
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 app.listen(PORT, () => {
