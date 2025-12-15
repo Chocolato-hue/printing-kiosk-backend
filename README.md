@@ -1,6 +1,6 @@
 # PrintPro Printer Backend
 
-Backend service for communicating with HP N451NW printer via Dell Wyse terminal.
+Backend service
 
 ## Features
 
