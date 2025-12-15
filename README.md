@@ -4,8 +4,7 @@ Backend service for communicating with HP N451NW printer via Dell Wyse terminal.
 
 ## Features
 
-- Direct communication with HP LaserJet Pro 400 M451nw
-- Dell Wyse thin client integration
+- Direct communication with printer
 - Image processing and optimization for printing
 - Print job management and status tracking
 - Security middleware and rate limiting
@@ -15,8 +14,8 @@ Backend service for communicating with HP N451NW printer via Dell Wyse terminal.
 
 ### Prerequisites
 
-1. **Dell Wyse Terminal** configured and connected to network
-2. **HP N451NW Printer** connected to network
+1. **Backend server** configured and connected to network
+2. **Printer** connected to network
 3. **Node.js** (v16 or higher)
 4. **Network access** to both Wyse terminal and printer
 
@@ -33,12 +32,8 @@ npm install
 2. Update the configuration values:
 
 ```env
-# Printer Configuration
-PRINTER_NAME=HP LaserJet Pro 400 M451nw
-PRINTER_IP=192.168.1.100
-PRINTER_PORT=9100
 
-# Dell Wyse Configuration
+# Back End server
 WYSE_HOST=192.168.1.50
 WYSE_USERNAME=admin
 
@@ -49,13 +44,13 @@ FRONTEND_URL=http://localhost:5173
 
 ### Network Setup
 
-1. **Find your HP N451NW IP address:**
+1. **Find your Printer IP address:**
    - Print a network configuration page from the printer
    - Or check your router's connected devices
 
-2. **Configure Dell Wyse:**
+2. **Configure Backend Server:**
    - Ensure Wyse terminal can access the printer
-   - Configure print drivers for HP N451NW
+   - Configure print drivers
    - Test printing from Wyse terminal
 
 3. **Network connectivity:**
@@ -105,9 +100,9 @@ GET /api/print-status/:jobId
 
 ## Dell Wyse Integration
 
-This backend is designed to work with Dell Wyse thin clients that have:
+This backend is designed to work with Wyse thin clients that have:
 
-1. **Network connectivity** to HP N451NW printer
+1. **Network connectivity** to printer
 2. **Print drivers** installed for HP LaserJet Pro 400 series
 3. **Network printing** configured
 4. **API access** enabled (if supported by your Wyse model)
@@ -121,12 +116,6 @@ This backend is designed to work with Dell Wyse thin clients that have:
 
 ## Printer Specifications
 
-**HP LaserJet Pro 400 M451nw:**
-- Color laser printer
-- Network connectivity (Ethernet/WiFi)
-- PCL 6, PostScript 3 support
-- Maximum resolution: 600 x 600 dpi
-- Supported media sizes: A4, A5, 4x6, Letter, Legal
 
 ## Security Features
 

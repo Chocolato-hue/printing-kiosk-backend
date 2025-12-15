@@ -162,7 +162,7 @@ async function processJob(doc) {
           .resize(canvasWidth, canvasHeight, { fit: "contain", background: "white" })
           .modulate({
             brightness: 1.10,   // adjust here
-            saturation: 1.05
+            saturation: 1.00
           })
           .withMetadata({ icc: srgbICC, density: 300 })
           .jpeg({ quality: 95 })
@@ -240,7 +240,7 @@ async function processJob(doc) {
             ])
             .modulate({
               brightness: 1.10,   // adjust here
-              saturation: 1.05
+              saturation: 1.00
             })
             .withMetadata({ icc: srgbICC, density: 300 })
             .jpeg({ quality: 95 })
@@ -269,7 +269,7 @@ async function processJob(doc) {
           .resize(1748, 2480, { fit: "contain", background: "white" })
           .modulate({
             brightness: 1.10,   // adjust here
-            saturation: 1.05
+            saturation: 1.00
           })
           .withMetadata({ icc: srgbICC, density: 300 })
           .jpeg({ quality: 95 })
@@ -398,7 +398,6 @@ app.get("/printer/qr/view", async (req, res) => {
           <h2>Scan to Print</h2>
           <img src="${qrImage}" alt="Printer QR Code" />
           <div class="printer-id">Printer ID: ${PRINTER_ID}</div>
-          <div class="hint">Stick this QR on the printer</div>
         </body>
       </html>
     `);
